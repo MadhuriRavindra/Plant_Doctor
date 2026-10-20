@@ -1,8 +1,12 @@
-import os, json
+
+import os
+import json
 from collections import defaultdict
-from dotenv import load_dotenv
+from pathlib import Path
+
 import streamlit as st
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
+from dotenv import load_dotenv
 from fastembed import ImageEmbedding
 from qdrant_client import QdrantClient
 from qdrant_client.models import Filter, FieldCondition, MatchValue
@@ -10,135 +14,289 @@ from groq import Groq
 
 load_dotenv()
 
+# Configuration
 COLLECTION = "plant_diseases_clip"
 K = 10
+MODEL_NAME = "Qdrant/clip-ViT-B-32-vision"
 LLM_MODEL = os.getenv("LLM_MODEL")
+DB_PATH = Path(__file__).parent / "qdrant_db"
+SOLUTIONS_PATH = Path(__file__).parent / "solutions.json"
 
-st.set_page_config(page_title="Plant Doctor", layout="wide")
+st.set_page_config(
+    page_title="Plant Doctor",
+    page_icon="🌱",
+    layout="wide",
+)
 
-# --- Session state: a counter changes the uploader's key, which resets it ---
-if "uploader_key" not in st.session_state:
-    st.session_state.uploader_key = 0
-if "history" not in st.session_state:
-    st.session_state.history = []   # list of (image, result) for past checks
+st.title("🌱 Plant Rescue Assistant")
+st.write(
+    "Upload a photo of an affected leaf to explore possible diseases "
+    "and get practical plant-care guidance."
+)
 
-def diagnose(image: Image.Image):
-    # TODO: call your existing code here (fastembed -> Qdrant -> solution)
-    # return the top label and the solution text
-    return "Tomato Early blight", "Remove affected leaves, avoid overhead watering..."
-
-# ---------------- Sidebar: upload + controls ----------------
-with st.sidebar:
-    st.header("Check a plant")
-    uploaded = st.file_uploader(
-        "Upload a leaf photo",
-        type=["jpg", "jpeg", "png"],
-        key=f"uploader_{st.session_state.uploader_key}",
-    )
-    question = st.text_input("Question (optional)", "How do I save this plant?")
-    run = st.button("Diagnose", type="primary", use_container_width=True, disabled=uploaded is None)
-
-    if st.button("Clear / new image", use_container_width=True):
-        st.session_state.uploader_key += 1   # new key = empty uploader
-        st.rerun()
-
-# ---------------- Main area: result ----------------
-st.title("Plant Disease Diagnosis")
-
-if uploaded is not None:
-    img = Image.open(uploaded).convert("RGB")
-    col1, col2 = st.columns(2)
-    with col1:
-        st.image(img, caption="Uploaded image", width="stretch")
-        st.button("Diagnose", type="primary", width="stretch", disabled=uploaded is None)
-        st.button("Clear / new image", width="stretch")
-    with col2:
-        if run:
-            with st.spinner("Analyzing..."):
-                label, solution = diagnose(img)
-            st.session_state.history.insert(0, (img, label, solution))
-            st.subheader(label)
-            st.write(solution)
-else:
-    st.info("Use the sidebar to upload a leaf photo.")
-
-# ---------------- Past checks ----------------
-if st.session_state.history:
-    st.divider()
-    st.subheader("Previous checks")
-    for i, (im, label, sol) in enumerate(st.session_state.history[:5]):
-        with st.expander(f"{label}", expanded=False):
-            st.image(im, width=200)
-            st.write(sol)
-
+# Load local resources once per Streamlit process.
 @st.cache_resource
-def load():
-    return ImageEmbedding("Qdrant/clip-ViT-B-32-vision"), QdrantClient(path="qdrant_db")
+def load_resources():
+    if not DB_PATH.exists():
+        raise FileNotFoundError(
+            "The Qdrant database is missing. Include qdrant_db "
+            "in the deployment or configure a hosted Qdrant instance."
+        )
 
-embedder, qdrant = load()
-solutions = json.load(open("solutions.json", encoding="utf-8"))
-groq = Groq(api_key=os.environ["GROQ_API_KEY"])
+    embedder = ImageEmbedding(MODEL_NAME)
+    client = QdrantClient(path=str(DB_PATH))
 
-def diagnose(img, plant_choice):
-    vec = list(embedder.embed([img]))[0].tolist()
-    flt = None
+    collection_names = [
+        collection.name
+        for collection in client.get_collections().collections
+    ]
+    if COLLECTION not in collection_names:
+        raise RuntimeError(
+            f"Qdrant collection '{COLLECTION}' was not found."
+        )
+
+    with SOLUTIONS_PATH.open(encoding="utf-8") as f:
+        solutions = json.load(f)
+
+    return embedder, client, solutions
+
+
+def diagnose(image, plant_choice, embedder, client):
+    vector = list(embedder.embed([image]))[0].tolist()
+
+    query_filter = None
     if plant_choice != "Not sure":
-        flt = Filter(must=[FieldCondition(key="plant", match=MatchValue(value=plant_choice))])
-    hits = qdrant.query_points(COLLECTION, query=vec, limit=K, query_filter=flt).points
-    scores = defaultdict(float)
-    for h in hits:
-        scores[(h.payload["plant"], h.payload["disease"])] += h.score
-    total = sum(scores.values())
-    ranked = sorted(scores.items(), key=lambda x: -x[1])[:3]
-    return [(p, d, s / total) for (p, d), s in ranked]
+        query_filter = Filter(
+            must=[
+                FieldCondition(
+                    key="plant",
+                    match=MatchValue(value=plant_choice),
+                )
+            ]
+        )
 
-st.title("Plant Rescue Assistant")
-
-if not LLM_MODEL:
-    st.error("LLM_MODEL is not set. Add it to your .env file (run list_models.py to see valid ids).")
-    st.stop()
-
-plant_choice = st.selectbox("Which plant is it?", ["Not sure", "Tomato", "Potato", "Pepper bell"])
-file = st.file_uploader("Upload a photo of the affected leaf", type=["jpg", "jpeg", "png"])
-question = st.text_input("Your question", "How can I save this plant?")
-
-if file and st.button("Diagnose"):
-    img = Image.open(file).convert("RGB")
-    st.image(img, width=300)
-    top3 = diagnose(img, plant_choice)
-
-    st.subheader("Most likely matches")
-    for plant, disease, share in top3:
-        st.write(f"**{plant} - {disease}**: {share:.0%} of matches")
-
-    if top3[0][2] < 0.5:
-        st.warning("Low confidence. Please upload a clearer, close-up photo of a single leaf.")
-    if top3[0][1] == "healthy" and top3[0][2] < 0.8:
-        st.warning("Mostly looks healthy, but some matches suggest early disease. "
-                   "Re-check in a few days with a closer photo.")
-
-    context = "\n\n".join(
-        f"{plant} - {disease} ({share:.0%} match)\n"
-        f"Symptoms: {solutions.get(f'{plant}|{disease}', {}).get('symptoms', 'n/a')}\n"
-        f"Treatment: {solutions.get(f'{plant}|{disease}', {}).get('solution', 'n/a')}"
-        for plant, disease, share in top3
+    result = client.query_points(
+        collection_name=COLLECTION,
+        query=vector,
+        limit=K,
+        query_filter=query_filter,
+        with_payload=True,
     )
 
-    prompt = f"""You are a careful plant-care assistant. A user uploaded a plant photo.
-The user says the plant is: {plant_choice}. If this is "Not sure", mention that the plant species may be misidentified.
-Question: {question}
+    # Combine similarity scores for each plant/disease pair.
+    scores = defaultdict(float)
 
-Candidate diagnoses from an image-similarity search (with match share):
+    for point in result.points:
+        payload = point.payload or {}
+        plant = payload.get("plant")
+        disease = payload.get("disease")
+
+        if plant and disease and point.score is not None:
+            scores[(plant, disease)] += max(0.0, point.score)
+
+    if not scores:
+        return []
+
+    total = sum(scores.values())
+    if total <= 0:
+        return []
+
+    ranked = sorted(
+        scores.items(),
+        key=lambda item: item[1],
+        reverse=True,
+    )[:3]
+
+    return [
+        (plant, disease, score / total)
+        for (plant, disease), score in ranked
+    ]
+
+
+def generate_rescue_plan(
+    plant_choice, question, top_matches, solutions, groq_client
+):
+    context_parts = []
+
+    for plant, disease, share in top_matches:
+        details = solutions.get(f"{plant}|{disease}", {})
+        context_parts.append(
+            f"{plant} - {disease} "
+            f"(relative match share: {share:.0%})\n"
+            f"Symptoms: {details.get('symptoms', 'Not available')}\n"
+            f"Treatment: {details.get('solution', 'Not available')}"
+        )
+
+    context = "\n\n".join(context_parts)
+
+    prompt = f"""
+You are a careful plant-care assistant.
+
+The user uploaded a plant leaf photo.
+Selected plant: {plant_choice}
+User question: {question}
+
+Image-similarity candidates from the local reference index:
 {context}
 
-Write: 1) the most likely problem, 2) step-by-step rescue plan, 3) prevention tips,
-4) one line on how to tell it apart from the runner-up if the top two are close.
-Use only the information above. Say clearly that this is an image-based estimate, and
-advise following product labels and keeping chemicals away from children and pets."""
+Provide:
+1. The most likely issue, clearly labelled as an estimate.
+2. A practical, step-by-step care plan based on the supplied information.
+3. Prevention tips.
+4. How the leading possibilities may differ, if useful.
 
-    with st.spinner("Writing advice..."):
-        resp = groq.chat.completions.create(
-            model=LLM_MODEL, messages=[{"role": "user", "content": prompt}]
+Use only the supplied candidate information for disease-specific
+claims. Do not invent treatments or chemical dosages. If the evidence
+is insufficient, say so and suggest getting a clearer photo or advice
+from a local agricultural expert.
+
+Image-similarity scores are not calibrated probabilities.
+Do not present the relative match share as diagnostic certainty.
+Recommend following product labels and keeping pesticides away
+from children and pets.
+"""
+
+    response = groq_client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+    )
+
+    return response.choices[0].message.content
+
+
+# Load resources and report setup errors clearly.
+try:
+    with st.spinner("Loading image-search model and database..."):
+        embedder, qdrant, solutions = load_resources()
+except Exception as exc:
+    st.error(f"Could not initialize the application: {exc}")
+    st.info(
+        "Check the Qdrant database, installed dependencies, "
+        "and model download access."
+    )
+    st.stop()
+
+# Groq configuration
+api_key = os.getenv("GROQ_API_KEY")
+
+if not api_key or not LLM_MODEL:
+    st.error(
+        "Groq configuration is missing. Set GROQ_API_KEY and "
+        "LLM_MODEL in your local .env file or Streamlit Cloud Secrets."
+    )
+    st.stop()
+
+groq_client = Groq(api_key=api_key)
+
+# Single diagnosis interface
+with st.sidebar:
+    st.header("Check your plant")
+
+    plant_choice = st.selectbox(
+        "Which plant is affected?",
+        ["Not sure", "Tomato", "Potato", "Pepper bell"],
+    )
+
+    uploaded_file = st.file_uploader(
+        "Upload a clear leaf photo",
+        type=["jpg", "jpeg", "png"],
+    )
+
+    question = st.text_input(
+        "What would you like to know?",
+        value="How can I help this plant recover?",
+    )
+
+    diagnose_clicked = st.button(
+        "Diagnose plant",
+        type="primary",
+        use_container_width=True,
+        disabled=uploaded_file is None,
+    )
+
+if uploaded_file is None:
+    st.info(
+        "Choose a plant (or select 'Not sure') and upload a photo "
+        "of one affected leaf to begin."
+    )
+    st.caption(
+        "Results are image-based suggestions, not a confirmed diagnosis."
+    )
+
+elif diagnose_clicked:
+    try:
+        image = Image.open(uploaded_file).convert("RGB")
+
+        left, right = st.columns([1, 1])
+
+        with left:
+            st.image(
+                image,
+                caption="Uploaded leaf photo",
+                use_container_width=True,
+            )
+
+        with st.spinner("Searching similar plant images..."):
+            matches = diagnose(
+                image, plant_choice, embedder, qdrant
+            )
+
+        with right:
+            st.subheader("Possible matches")
+
+            if not matches:
+                st.warning(
+                    "No useful matches were found. Try a clearer "
+                    "photo with one leaf filling most of the frame."
+                )
+                st.stop()
+
+            for rank, (plant, disease, share) in enumerate(
+                matches, start=1
+            ):
+                st.markdown(
+                    f"**{rank}. {plant} — {disease}**  \n"
+                    f"Relative match share: {share:.0%}"
+                )
+
+            if matches[0][2] < 0.5:
+                st.warning(
+                    "The leading match is not strong enough to rely "
+                    "on. Treat this result cautiously."
+                )
+
+            if matches[0][1].lower() == "healthy":
+                st.info(
+                    "The closest match is healthy. This does not "
+                    "rule out a disease; monitor the plant and "
+                    "consider another photo if symptoms persist."
+                )
+
+        with st.spinner("Preparing plant-care guidance..."):
+            advice = generate_rescue_plan(
+                plant_choice,
+                question,
+                matches,
+                solutions,
+                groq_client,
+            )
+
+        st.divider()
+        st.subheader("🌿 Suggested rescue plan")
+        st.markdown(advice)
+
+        st.caption(
+            "This is an AI-generated, image-based estimate. "
+            "Check the plant and local growing conditions before "
+            "taking action."
         )
-    st.subheader("Rescue plan")
-    st.write(resp.choices[0].message.content)
+
+    except UnidentifiedImageError:
+        st.error("This image could not be opened. Please upload a valid photo.")
+    except Exception as exc:
+        st.error(f"Diagnosis failed: {exc}")
+        st.caption(
+            "Check the model, Qdrant database, API configuration, "
+            "and application logs."
+        )
