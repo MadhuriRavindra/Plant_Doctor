@@ -1,0 +1,62 @@
+{
+  "Pepper bell|Bacterial spot": {
+    "symptoms": "Small water-soaked spots that turn dark brown, often with a yellow halo; leaves yellow and drop.",
+    "solution": "Remove and bin infected leaves. Water at the base, never overhead, and don't handle plants when wet. A copper-based bactericide used exactly as labeled can slow spread. Rotate crops next season."
+  },
+  "Pepper bell|healthy": {
+    "symptoms": "No disease visible.",
+    "solution": "Keep watering at the base, give good airflow, and check leaves weekly."
+  },
+  "Potato|Early blight": {
+    "symptoms": "Dark brown spots with concentric rings on older, lower leaves; leaves yellow and die.",
+    "solution": "Remove affected lower leaves, mulch to stop soil splash, water at the base and keep plants well fed. Use a fungicide labeled for potatoes if it keeps spreading. Rotate crops."
+  },
+  "Potato|Late blight": {
+    "symptoms": "Dark water-soaked patches that spread fast, white fuzzy growth under leaves in humid weather.",
+    "solution": "Act quickly: remove and destroy infected plants (do not compost), avoid wet foliage, and use a protective fungicide labeled for late blight. Remove volunteer potatoes."
+  },
+  "Potato|healthy": {
+    "symptoms": "No disease visible.",
+    "solution": "Keep foliage dry, hill soil around plants, and inspect regularly."
+  },
+  "Tomato|Bacterial spot": {
+    "symptoms": "Small dark greasy spots on leaves, sometimes with yellow halos; rough scabby spots on fruit.",
+    "solution": "Remove infected leaves, avoid overhead watering and working among wet plants, use a copper-based product as labeled, and rotate crops. Use clean seed."
+  },
+  "Tomato|Early blight": {
+    "symptoms": "Brown spots with concentric rings on older leaves, yellowing around them.",
+    "solution": "Remove affected lower leaves, mulch, water at the base, stake plants for airflow, and use a labeled fungicide if needed. Clear plant debris at season end."
+  },
+  "Tomato|Late blight": {
+    "symptoms": "Large dark water-soaked patches on leaves and stems, white mold underneath in humid weather, firm brown fruit rot.",
+    "solution": "Spreads very fast. Remove and destroy infected plants (do not compost), keep foliage dry, and use a labeled protective fungicide on healthy plants nearby."
+  },
+  "Tomato|Leaf Mold": {
+    "symptoms": "Pale yellow patches on upper leaf surfaces with olive-gray mold underneath; common in humid, poorly ventilated spaces.",
+    "solution": "Improve ventilation and lower humidity, space and prune plants, remove affected leaves, and water at the base. Use a labeled fungicide if severe."
+  },
+  "Tomato|Septoria leaf spot": {
+    "symptoms": "Many small round spots with dark borders and gray centers, starting on lower leaves.",
+    "solution": "Remove spotted lower leaves, mulch to stop splash, water at the base, and use a labeled fungicide if it keeps spreading. Rotate crops and clear debris."
+  },
+  "Tomato|Spider mites Two spotted spider mite": {
+    "symptoms": "Fine yellow stippling on leaves, fine webbing, leaves drying out; worse in hot, dry conditions.",
+    "solution": "Spray leaves (especially undersides) with water, then use insecticidal soap or neem oil as labeled. Raise humidity, avoid dusty or drought-stressed plants, and isolate badly affected plants."
+  },
+  "Tomato|Target Spot": {
+    "symptoms": "Brown spots with concentric rings, similar to early blight, sometimes on stems and fruit.",
+    "solution": "Remove affected leaves, improve airflow, avoid wet foliage, clear debris, and use a labeled fungicide if needed."
+  },
+  "Tomato|Tomato YellowLeaf Curl Virus": {
+    "symptoms": "Small, yellowing leaves curling upward, stunted plants, poor fruit set. Spread by whiteflies.",
+    "solution": "No cure. Remove and destroy infected plants, control whiteflies (yellow sticky traps, fine mesh netting, insecticidal soap), and choose resistant varieties next time."
+  },
+  "Tomato|Tomato mosaic virus": {
+    "symptoms": "Mottled light and dark green leaves, distorted or fern-like growth, stunted plants.",
+    "solution": "No cure. Remove infected plants, wash hands and disinfect tools, avoid handling tobacco before touching plants, and use resistant varieties and clean seed."
+  },
+  "Tomato|healthy": {
+    "symptoms": "No disease visible.",
+    "solution": "Keep watering at the base, give good airflow, and check leaves weekly."
+  }
+}

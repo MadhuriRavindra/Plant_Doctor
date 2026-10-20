@@ -1,0 +1,32 @@
+
+cat > .gitignore <<'EOF'
+# Python
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Local vector databases and generated indexes
+qdrant_local/
+chroma_db/
+vector_store/
+
+# Generated data and model files
+*.bin
+*.safetensors
+*.pt
+*.pth
+*.onnx
+
+# Logs and temporary files
+*.log
+.DS_Store
+EOF
+archive/
