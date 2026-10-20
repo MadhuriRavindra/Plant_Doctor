@@ -18,7 +18,17 @@ load_dotenv()
 COLLECTION = "plant_diseases_clip"
 K = 10
 MODEL_NAME = "Qdrant/clip-ViT-B-32-vision"
-LLM_MODEL = os.getenv("LLM_MODEL")
+def get_setting(name):
+    value = os.getenv(name)
+    if value:
+        return value
+    try:
+        return st.secrets[name]
+    except (KeyError, FileNotFoundError):
+        return None
+
+LLM_MODEL = get_setting("LLM_MODEL")
+
 DB_PATH = Path(__file__).parent / "qdrant_db"
 SOLUTIONS_PATH = Path(__file__).parent / "solutions.json"
 
@@ -178,7 +188,7 @@ except Exception as exc:
     st.stop()
 
 # Groq configuration
-api_key = os.getenv("GROQ_API_KEY")
+api_key = get_setting("GROQ_API_KEY")
 
 if not api_key or not LLM_MODEL:
     st.error(
