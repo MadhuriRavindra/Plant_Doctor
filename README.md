@@ -1,8 +1,8 @@
-# 🌿 Plant Doctor
+# 🌿 Plant Doctor (v1)
 
-Upload a photo of a sick plant and get a likely diagnosis plus suggestions for how to save it.
+Upload a photo of a sick plant and get a likely diagnosis plus a suggested solution.
 
-Plant Doctor identifies the plant, then searches a vector database of labelled plant-disease images to find the closest matching diseases. Everything runs locally with no PyTorch dependency, so it stays light to install and deploy.
+Plant Doctor embeds your photo with CLIP and searches a vector database of labelled plant-disease images to find the closest matching diseases. It runs without PyTorch, so it stays light to install and deploy.
 
 **Live app:** `<add your deployed URL here>`
 
@@ -10,19 +10,17 @@ Plant Doctor identifies the plant, then searches a vector database of labelled p
 
 ## How it works
 
-1. **Upload**: the user uploads a leaf/plant photo in the Streamlit sidebar and can optionally type a question.
-2. **Embed**: the image is converted to a CLIP embedding using [fastembed](https://github.com/qdrant/fastembed) (ONNX, no PyTorch).
-3. **Identify the plant**: CLIP zero-shot matching estimates the plant species (tomato, potato, bell pepper).
-4. **Retrieve**: Qdrant (local mode) finds the nearest labelled disease images, filtered to the identified plant.
-5. **Answer**: the app shows the top matching diseases with similarity scores and the recommended solution.
+1. **Upload** a leaf/plant photo in the Streamlit app.
+2. **Choose the plant** from the "Which plant is it?" selector (default: "Not sure") and optionally type a question.
+3. **Embed** the image with CLIP via [fastembed](https://github.com/qdrant/fastembed) (ONNX, no PyTorch).
+4. **Retrieve** the nearest labelled disease images from Qdrant (local mode).
+5. **Answer**: the app shows the top matching diseases and the recommended solution.
 
 ```
-Photo ──► CLIP embedding (fastembed) ──► zero-shot plant ID
-                     │                          │
-                     └──► Qdrant similarity search (filtered by plant)
-                                    │
-                                    ▼
-                    Top disease matches + solutions (Streamlit UI)
+Photo ──► CLIP embedding (fastembed) ──► Qdrant similarity search
+                                              │
+                                              ▼
+                              Top disease matches + solution (Streamlit)
 ```
 
 ## Tech stack
@@ -39,16 +37,11 @@ Photo ──► CLIP embedding (fastembed) ──► zero-shot plant ID
 
 ```
 Plant dieases diagnosis app/
-├── app.py                    # Streamlit app (the deployed entry point)
-├── index_images.py           # Builds the Qdrant index from PlantVillage
-├── evaluate_real_world.py    # Evaluates on your own photos in real_world_test/<plant>/
-├── diagnose_plant_id.py      # Compares zero-shot vs trained plant identification
-├── score_check.py            # Compares similarity scores: dataset vs real-world photos
-├── train_plant_classifier.py # (Experimental) logistic-regression plant classifier
-├── test_set.json             # Held-out images created at indexing time
-├── qdrant_db/                # Local vector database
-├── real_world_test/          # Your own test photos, one folder per plant
-└── archive/PlantVillage/     # Dataset (not committed)
+├── app.py            # Streamlit app (entry point)
+├── index_images.py   # Builds the Qdrant index from PlantVillage
+├── test_set.json     # Held-out images created at indexing time
+├── qdrant_db/        # Local vector database
+└── archive/PlantVillage/   # Dataset (not needed at runtime)
 ```
 
 ## Setup
@@ -57,7 +50,7 @@ Plant dieases diagnosis app/
 pip install streamlit fastembed qdrant-client pillow
 ```
 
-Download PlantVillage from Kaggle and unzip it to `archive/PlantVillage/`, so each class is a folder (e.g. `Tomato_Early_blight`).
+Download PlantVillage from Kaggle and unzip it to `archive/PlantVillage/`, so each class is its own folder.
 
 ## Usage
 
@@ -75,22 +68,21 @@ This indexes up to 300 images per class into `qdrant_db/` and saves the held-out
 streamlit run app.py
 ```
 
-Open the sidebar, upload a plant photo, optionally add a question, and read the result.
-
 ## Deployment notes
 
-- Commit `qdrant_db/` (or rebuild the index on startup) so the deployed app has data to search. Local-mode Qdrant is file-based, so the host needs a persistent or bundled copy.
-- Do not commit the raw PlantVillage dataset; only the built index is needed at runtime.
-- Pin versions in `requirements.txt`:
+- Bundle `qdrant_db/` with the app (or rebuild the index on startup). Local-mode Qdrant is file-based, so the host needs a copy of it.
+- Don't ship the raw PlantVillage dataset; only the built index is needed at runtime.
+- `requirements.txt`:
   ```
   streamlit
   fastembed
   qdrant-client
   pillow
   ```
-- Newer Streamlit versions deprecate `use_container_width`; use `width="stretch"` instead if you see that warning.
 
 ## Evaluation results
+
+Retrieval accuracy on held-out PlantVillage images:
 
 | Run | Indexed / class | Held-out images | Top-1 | Top-3 |
 |---|---|---|---|---|
@@ -101,17 +93,10 @@ Weakest classes: Tomato late blight, early blight, Septoria leaf spot and Target
 
 ## Known limitations
 
-- **Lab vs real-world gap.** PlantVillage images are clean, single-leaf photos on plain backgrounds. Best-match similarity is a median of 0.967 on held-out dataset images but only about 0.81 on real-world photos, so disease matches on real photos are less reliable (neighbours are often spread across several diseases).
-- **Plant identification.** Zero-shot CLIP got 5/6 real-world photos right, versus 2/6 for a trained classifier that scored 99.5% on PlantVillage but overfit to its look. Zero-shot is used in the app for that reason.
-- **Limited coverage.** Only the 15 PlantVillage classes (pepper bell, potato, tomato) are supported.
-- This is a decision aid, not a substitute for an agronomist. Treat low similarity scores with caution.
-
-## Roadmap
-
-- Add real-world, in-the-wild images to the index to close the dataset gap
-- Show a low-confidence warning when similarity falls below a threshold
-- Support more plants and diseases
-- Add re-ranking or fine-tuning for the hard tomato classes
+- Covers only the 15 PlantVillage classes (pepper bell, potato, tomato).
+- PlantVillage photos are clean, single-leaf images on plain backgrounds, so photos taken in the field may match less reliably.
+- Some tomato diseases look similar and are confused more often.
+- This is a decision aid, not a substitute for an agronomist.
 
 ## Acknowledgements
 
